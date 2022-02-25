@@ -1,0 +1,12 @@
+{
+  "name": "com.recatek.asepriteimporter",
+  "version": "0.0.1",
+  "displayName": "AsepriteImporter",
+  "description": "An Aseprite texture importer for Unity",
+  "unity": "2021.2",
+  "author": {
+    "name": "recatek",
+    "email": "recatek@hotmail.com",
+    "url": "https://github.com/recatek"
+  }
+}
