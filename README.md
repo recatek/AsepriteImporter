@@ -1,2 +1,2 @@
-# UnityAse
-A 2D texture importer from Aseprite to Unity
+# UnityASE
+An Aseprite .ase file texture importer for Unity
