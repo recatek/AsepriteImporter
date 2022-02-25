@@ -1,2 +1,2 @@
 # AsepriteImporter
-An Aseprite .ase file texture importer for Unity
+An Aseprite texture importer for Unity
