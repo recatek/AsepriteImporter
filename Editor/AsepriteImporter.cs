@@ -29,10 +29,10 @@ namespace AsepriteImporter
         private static Texture2D fileIcon = null;
 
         // TODO: Make project preferences?
-        [SerializeField]
-        private string linearPrefix = "#";
-        [SerializeField]
+        [SerializeField, Tooltip("Top-level layers beginning with any of these prefixes will be ignored along with their children.")]
         private string[] ignorePrefixes = new[] { "@", "." };
+        [SerializeField, Tooltip("Layers containing any of the following strings (not case-sensitive) in their name will be imported as Linear rather than sRGB.")]
+        private string[] matchLinear = new[] { "normal", "metal", "rough", "smooth" };
 
         public override void OnImportAsset(AssetImportContext ctx)
         {
@@ -101,25 +101,22 @@ namespace AsepriteImporter
                     }
                 }
 
-                string groupName = group.Name;
-                bool linear = HasLinearPrefix(ref groupName);
-                string textureName = filename + "_" + groupName;
-                yield return CreateTexture(file, currentColors, textureName, linear);
+                yield return CreateTexture(
+                    file, 
+                    currentColors, 
+                    filename + "_" + group.Name, 
+                    ShouldMarkLinear(group.Name));
             }
         }
 
         /// <summary>
-        /// Checks for a linear (as opposed to sRGB) prefix on the given group name.
-        /// Also returns trims the name to remove the prefix, if it's present.
+        /// Checks if a group name contains any of the names flagged as linear layers.
         /// </summary>
-        private bool HasLinearPrefix(ref string groupName)
+        private bool ShouldMarkLinear(string groupName)
         {
-            if (groupName.StartsWith(linearPrefix))
-            {
-                groupName = groupName.Substring(1);
-                return true;
-            }
-
+            foreach (string match in matchLinear)
+                if (groupName.ToLower().Contains(match.ToLower()))
+                    return true;
             return false;
         }
 
