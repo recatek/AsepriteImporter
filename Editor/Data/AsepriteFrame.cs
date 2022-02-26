@@ -4,7 +4,7 @@ using System.IO;
 
 namespace AsepriteImporter.Data
 {
-    internal struct AsepriteFrame
+    internal class AsepriteFrame
     {
         public uint Size { get; }
         public ushort DurationMs { get; }
