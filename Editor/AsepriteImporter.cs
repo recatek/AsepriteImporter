@@ -6,12 +6,53 @@ using System.IO;
 using System.Linq;
 
 using AsepriteImporter.Data;
+using AsepriteImporter.Sheet;
 
 namespace AsepriteImporter
 {
     [ScriptedImporter(1, new[] { "ase", "aseprite" })]
     public class AsepriteImporter : ScriptedImporter
     {
+        /// <summary>
+        /// Generates a Texture2D with the 16x16 Aseprite file icon.
+        /// This texture is cached for subsequent calls.
+        /// </summary>
+        private static Texture2D CreateFileIcon()
+        {
+            if (fileIcon == null)
+            {
+                Color t = new Color(0.00f, 0.00f, 0.00f, 0.0f); // Transparent
+                Color b = new Color(0.40f, 0.33f, 0.38f, 1.0f); // Border
+                Color s = new Color(0.49f, 0.57f, 0.62f, 1.0f); // Shadow
+                Color w = new Color(1.00f, 1.00f, 1.00f, 1.0f); // White
+
+                fileIcon = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+                fileIcon.name = "Aseprite File Icon";
+                fileIcon.SetPixels(new[]
+                {
+                    t, t, t, t, t, t, t, t, t, t, t, t, t, t, t, t,
+                    t, t, b, b, b, b, b, b, b, b, b, b, b, b, t, t,
+                    t, t, b, s, s, s, s, s, s, s, s, s, s, b, t, t,
+                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
+                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
+                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
+                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
+                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
+                    t, t, b, w, w, b, w, w, w, w, b, w, w, b, t, t,
+                    t, t, b, w, w, b, w, w, w, w, b, w, w, b, t, t,
+                    t, t, b, w, w, b, w, w, w, s, b, s, s, b, t, t,
+                    t, t, b, w, w, b, w, w, w, b, b, b, b, b, t, t,
+                    t, t, b, w, w, w, w, w, w, b, w, w, w, b, t, t,
+                    t, t, b, w, w, w, w, w, w, b, w, w, b, t, t, t,
+                    t, t, b, w, w, w, w, w, w, b, w, b, t, t, t, t,
+                    t, t, b, b, b, b, b, b, b, b, b, t, t, t, t, t,
+                });
+                fileIcon.Apply(false, true);
+            }
+
+            return fileIcon;
+        }
+
         /// <summary>
         /// Helper class for building the collection of cels and layers for each top-level texture group.
         /// </summary>
@@ -32,7 +73,13 @@ namespace AsepriteImporter
         [SerializeField, Tooltip("Top-level layers beginning with any of these prefixes will be ignored along with their children.")]
         private string[] ignorePrefixes = new[] { "@", "." };
         [SerializeField, Tooltip("Layers containing any of the following strings (not case-sensitive) in their name will be imported as Linear rather than sRGB.")]
-        private string[] matchLinear = new[] { "normal", "metal", "rough", "smooth" };
+        private string[] linearKeywords = new[] { "norm", "metal", "rough", "smooth" };
+        [SerializeField, Tooltip("If true, will generate quads with the given UVs from all the sprite islands in this sprite (determined by color alpha).")]
+        private bool quadGeneration = false;
+        [SerializeField, Tooltip("The keyword (partial match) of the layer with the alpha channel to use for determining UV islands for quad generation.")]
+        private string quadAlphaKeyword = "color";
+        [SerializeField, Tooltip("Size of each pixel, in meters.")]
+        private float quadPixelScale = 0.1f;
 
         public override void OnImportAsset(AssetImportContext ctx)
         {
@@ -50,9 +97,25 @@ namespace AsepriteImporter
             ctx.AddObjectToAsset("icon", asset, CreateFileIcon());
             ctx.SetMainObject(asset);
 
+            Texture2D meshGenerationTex = null;
             string filename = Path.GetFileNameWithoutExtension(ctx.assetPath);
             foreach (Texture2D tex in BuildTextures(file, filename))
+            {
                 ctx.AddObjectToAsset(tex.name, tex, tex);
+                if (tex.name.ToLower().Contains(quadAlphaKeyword.ToLower()))
+                    meshGenerationTex = tex;
+            }
+
+            if (quadGeneration)
+            {
+                GameObject prefab = new GameObject($"{filename}_SheetPrefab");
+                foreach ((Mesh mesh, Vector3 origin) in GenerateMeshes(meshGenerationTex, filename))
+                {
+                    ctx.AddObjectToAsset(mesh.name, mesh);
+                    AddMeshToPrefab(mesh, origin, prefab);
+                }
+                ctx.AddObjectToAsset(prefab.name, prefab);
+            }
         }
 
         /// <summary>
@@ -114,7 +177,7 @@ namespace AsepriteImporter
         /// </summary>
         private bool ShouldMarkLinear(string groupName)
         {
-            foreach (string match in matchLinear)
+            foreach (string match in linearKeywords)
                 if (groupName.ToLower().Contains(match.ToLower()))
                     return true;
             return false;
@@ -248,43 +311,30 @@ namespace AsepriteImporter
         }
 
         /// <summary>
-        /// Generates a Texture2D with the 16x16 Aseprite file icon.
-        /// This texture is cached for subsequent calls.
+        /// Generates meshes with size and UV mapping corresponding to the unique identified
+        /// islands on the sprite sheet. Requires alpha information from a selected key texture.
         /// </summary>
-        private static Texture2D CreateFileIcon()
+        private IEnumerable<(Mesh, Vector3)> GenerateMeshes(Texture2D alphaTex, string filename)
         {
-            if (fileIcon == null)
-            {
-                Color t = new Color(0.00f, 0.00f, 0.00f, 0.0f); // Transparent
-                Color b = new Color(0.40f, 0.33f, 0.38f, 1.0f); // Border
-                Color s = new Color(0.49f, 0.57f, 0.62f, 1.0f); // Shadow
-                Color w = new Color(1.00f, 1.00f, 1.00f, 1.0f); // White
+            if (alphaTex != null)
+                return new AsepriteSheet(alphaTex).ConvertToMeshes(filename, quadPixelScale);
 
-                fileIcon = new Texture2D(16, 16, TextureFormat.RGBA32, false);
-                fileIcon.name = "Aseprite File Icon";
-                fileIcon.SetPixels(new[]
-                {
-                    t, t, t, t, t, t, t, t, t, t, t, t, t, t, t, t,
-                    t, t, b, b, b, b, b, b, b, b, b, b, b, b, t, t,
-                    t, t, b, s, s, s, s, s, s, s, s, s, s, b, t, t,
-                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
-                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
-                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
-                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
-                    t, t, b, w, w, w, w, w, w, w, w, w, w, b, t, t,
-                    t, t, b, w, w, b, w, w, w, w, b, w, w, b, t, t,
-                    t, t, b, w, w, b, w, w, w, w, b, w, w, b, t, t,
-                    t, t, b, w, w, b, w, w, w, s, b, s, s, b, t, t,
-                    t, t, b, w, w, b, w, w, w, b, b, b, b, b, t, t,
-                    t, t, b, w, w, w, w, w, w, b, w, w, w, b, t, t,
-                    t, t, b, w, w, w, w, w, w, b, w, w, b, t, t, t,
-                    t, t, b, w, w, w, w, w, w, b, w, b, t, t, t, t,
-                    t, t, b, b, b, b, b, b, b, b, b, t, t, t, t, t,
-                });
-                fileIcon.Apply(false, true);
-            }
+            Debug.LogWarning($"Couldn't find a key texture for generating meshes for {filename}.");
+            return Enumerable.Empty<(Mesh, Vector3)>();
+        }
 
-            return fileIcon;
+        /// <summary>
+        /// Adds a mesh to the sheet collection prefab, setting the origin correctly
+        /// </summary>
+        /// <param name="mesh"></param>
+        /// <param name="prefab"></param>
+        private void AddMeshToPrefab(Mesh mesh, Vector3 origin, GameObject prefab)
+        {
+            GameObject meshObject = new GameObject(mesh.name);
+            meshObject.AddComponent<MeshFilter>().mesh = mesh;
+            meshObject.AddComponent<MeshRenderer>();
+            meshObject.transform.parent = prefab.transform;
+            meshObject.transform.position = origin;
         }
     }
 }
