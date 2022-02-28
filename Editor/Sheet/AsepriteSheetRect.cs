@@ -62,7 +62,7 @@ namespace AsepriteImporter.Sheet
         {
             Mesh mesh = new Mesh()
             {
-                name = $"{filename}_({minX}, {minY})_({maxX}, {maxY})",
+                name = $"{filename}_({minX}, {minY})",
                 vertices = ComputeVertices(scale),
                 uv = ComputeUVs(sheetWidth, sheetHeight),
                 triangles = TRIANGLES,
