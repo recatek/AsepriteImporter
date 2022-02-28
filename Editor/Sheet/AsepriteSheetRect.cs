@@ -81,8 +81,8 @@ namespace AsepriteImporter.Sheet
         private Vector3[] ComputeVertices(float scale)
         {
             Vector2 extents = new Vector2(
-                (maxX - minX) * 0.5f * scale,
-                (maxY - minY) * 0.5f * scale);
+                (maxX - minX + 1) * (0.5f * scale),
+                (maxY - minY + 1) * (0.5f * scale));
             Vector2 mirrorX = new Vector2(-extents.x, extents.y);
 
             return new Vector3[]
