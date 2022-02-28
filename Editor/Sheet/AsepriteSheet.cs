@@ -15,9 +15,9 @@ namespace AsepriteImporter.Sheet
 
             AsepriteSheetCell[] cells = new AsepriteSheetCell[width * height];
 
-            for (int x = 0; x < width; ++x)
+            for (int y = 0; y < height; ++y)
             {
-                for (int y = 0; y < height; ++y)
+                for (int x = 0; x < width; ++x)
                 {
                     // Need to flip the Texture2D on the Y axis
                     int yFlip = (height - 1) - y;
@@ -52,8 +52,8 @@ namespace AsepriteImporter.Sheet
         /// </summary>
         public IEnumerable<(Mesh, Vector3)> ConvertToMeshes(string filename, float scale)
         {
-            for (int x = 0; x < width; ++x)
-                for (int y = 0; y < height; ++y)
+            for (int y = 0; y < height; ++y)
+                for (int x = 0; x < width; ++x)
                     if (cells[y * width + x] == AsepriteSheetCell.Full)
                         yield return GenerateMeshFromIsland(x, y, filename, scale);
         }
@@ -89,8 +89,8 @@ namespace AsepriteImporter.Sheet
             int maxX = Math.Clamp(x + 1, 0, width  - 1);
             int maxY = Math.Clamp(y + 1, 0, height - 1);
 
-            for (int xq = minX; xq <= maxX; ++xq)
-                for (int yq = minY; yq <= maxY; ++yq)
+            for (int yq = minY; yq <= maxY; ++yq)
+                for (int xq = minX; xq <= maxX; ++xq)
                     if (xq != x || yq != y)
                         if (cells[yq * width + xq] == AsepriteSheetCell.Full)
                             stack.Push((xq, yq));
