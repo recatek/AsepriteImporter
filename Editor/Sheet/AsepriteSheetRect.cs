@@ -70,9 +70,10 @@ namespace AsepriteImporter.Sheet
                 tangents = TANGENTS,
             };
 
+            int height = maxY - minY;
             Vector3 origin = new Vector3(
-                (maxX + minX - sheetWidth) * scale * 0.5f,
-                (-maxY - minY + sheetHeight) * scale * 0.5f,
+                minX * scale,
+                (sheetHeight - minY - height) * scale,
                 0.0f);
 
             return (mesh, origin);
@@ -80,17 +81,15 @@ namespace AsepriteImporter.Sheet
 
         private Vector3[] ComputeVertices(float scale)
         {
-            Vector2 extents = new Vector2(
-                (maxX - minX + 1) * (0.5f * scale),
-                (maxY - minY + 1) * (0.5f * scale));
-            Vector2 mirrorX = new Vector2(-extents.x, extents.y);
+            float width = (maxX - minX + 1) * scale;
+            float height = (maxY - minY + 1) * scale;
 
             return new Vector3[]
             {
-                -extents,
-                -mirrorX,
-                 mirrorX,
-                 extents,
+                new Vector3(0.0f, 0.0f),
+                new Vector3(width, 0.0f),
+                new Vector3(0.0f, height),
+                new Vector3(width, height),
             };
         }
 
