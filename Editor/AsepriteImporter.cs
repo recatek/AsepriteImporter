@@ -67,19 +67,32 @@ namespace AsepriteImporter
             public void Add(AsepriteCelChunk chunk, AsepriteLayerChunk layer) { members.Add((chunk, layer)); }
         }
 
+        [Serializable]
+        private class QuadGenerationSettings
+        {
+            [field: SerializeField, Tooltip("If true, will generate quads with the given UVs from all the sprite islands in this sprite (determined by color alpha).")]
+            public bool Enabled { get; private set; } = false;
+            [field: SerializeField, Tooltip("The keyword (partial match) of the layer with the alpha channel to use for determining UV islands for quad generation.")]
+            public string AlphaKeyword { get; private set; } = "color";
+            [field: SerializeField, Tooltip("Size of each pixel, in meters.")]
+            public float PixelScale { get; private set; } = 0.1f;
+        }
+
         private static Texture2D fileIcon = null;
+
+        [SerializeField, Tooltip("If set, the AsepriteImporter will clone this material but feed in the loaded textures as inputs.")]
+        private Material baseMaterial = null;
 
         // TODO: Make project preferences?
         [SerializeField, Tooltip("Top-level layers beginning with any of these prefixes will be ignored along with their children.")]
         private string[] ignorePrefixes = new[] { "@", "." };
         [SerializeField, Tooltip("Layers containing any of the following strings (not case-sensitive) in their name will be imported as Linear rather than sRGB.")]
         private string[] linearKeywords = new[] { "norm", "metal", "rough", "smooth" };
-        [SerializeField, Tooltip("If true, will generate quads with the given UVs from all the sprite islands in this sprite (determined by color alpha).")]
-        private bool quadGeneration = false;
-        [SerializeField, Tooltip("The keyword (partial match) of the layer with the alpha channel to use for determining UV islands for quad generation.")]
-        private string quadAlphaKeyword = "color";
-        [SerializeField, Tooltip("Size of each pixel, in meters.")]
-        private float quadPixelScale = 0.1f;
+
+        [SerializeField]
+        private QuadGenerationSettings quadGeneration = null;
+
+
 
         public override void OnImportAsset(AssetImportContext ctx)
         {
@@ -97,16 +110,25 @@ namespace AsepriteImporter
             ctx.AddObjectToAsset("icon", asset, CreateFileIcon());
             ctx.SetMainObject(asset);
 
-            Texture2D meshGenerationTex = null;
             string filename = Path.GetFileNameWithoutExtension(ctx.assetPath);
-            foreach (Texture2D tex in BuildTextures(file, filename))
+
+            Material material = baseMaterial == null ? null : new Material(baseMaterial);
+            material.name = filename;
+
+            Texture2D meshGenerationTex = null;
+            foreach (Texture2D tex in BuildTextures(file))
             {
+                if (material != null)
+                    material.SetTexture("_" + tex.name, tex);
+
+                tex.name = filename + "_" + tex.name;
                 ctx.AddObjectToAsset(tex.name, tex, tex);
-                if (tex.name.ToLower().Contains(quadAlphaKeyword.ToLower()))
+
+                if (tex.name.ToLower().Contains(quadGeneration.AlphaKeyword.ToLower()))
                     meshGenerationTex = tex;
             }
 
-            if (quadGeneration)
+            if (quadGeneration.Enabled)
             {
                 GameObject prefab = new GameObject($"{filename}_SheetPrefab");
                 foreach ((Mesh mesh, Vector3 origin) in GenerateMeshes(meshGenerationTex, filename))
@@ -115,6 +137,11 @@ namespace AsepriteImporter
                     AddMeshToPrefab(mesh, origin, prefab);
                 }
                 ctx.AddObjectToAsset(prefab.name, prefab);
+            }
+
+            if (material != null)
+            {
+                ctx.AddObjectToAsset(material.name, material);
             }
         }
 
@@ -131,7 +158,7 @@ namespace AsepriteImporter
         /// <summary>
         /// Builds each of the textures for this file by combining file layers.
         /// </summary>
-        private IEnumerable<Texture2D> BuildTextures(AsepriteFile file, string filename)
+        private IEnumerable<Texture2D> BuildTextures(AsepriteFile file)
         {
             AsepriteHeader header = file.Header;
             AsepriteColorDepth depth = header.ColorDepth;
@@ -166,8 +193,8 @@ namespace AsepriteImporter
 
                 yield return CreateTexture(
                     file, 
-                    currentColors, 
-                    filename + "_" + group.Name, 
+                    currentColors,
+                    group.Name, 
                     ShouldMarkLinear(group.Name));
             }
         }
@@ -224,7 +251,7 @@ namespace AsepriteImporter
                     linear);
 
             texture.name = name;
-            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.wrapMode = TextureWrapMode.Repeat;
             texture.filterMode = FilterMode.Point;
             texture.SetPixels32(pixels);
             texture.Apply();
@@ -317,7 +344,7 @@ namespace AsepriteImporter
         private IEnumerable<(Mesh, Vector3)> GenerateMeshes(Texture2D alphaTex, string filename)
         {
             if (alphaTex != null)
-                return new AsepriteSheet(alphaTex).ConvertToMeshes(filename, quadPixelScale);
+                return new AsepriteSheet(alphaTex).ConvertToMeshes(filename, quadGeneration.PixelScale);
 
             Debug.LogWarning($"Couldn't find a key texture for generating meshes for {filename}.");
             return Enumerable.Empty<(Mesh, Vector3)>();
