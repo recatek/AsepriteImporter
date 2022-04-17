@@ -113,7 +113,8 @@ namespace AsepriteImporter
             string filename = Path.GetFileNameWithoutExtension(ctx.assetPath);
 
             Material material = baseMaterial == null ? null : new Material(baseMaterial);
-            material.name = filename;
+            if (material != null)
+                material.name = filename;
 
             Texture2D meshGenerationTex = null;
             foreach (Texture2D tex in BuildTextures(file))
