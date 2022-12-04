@@ -12,9 +12,8 @@ namespace AsepriteImporter
 
         /// <summary>
         /// Computes (a/255) * (b/255) * 255 in a fast bitshift way.
-        /// Inspired by Pixman's MUL_UN8 helper macro.
+        /// Functional stand-in for Pixman's MUL_UN8 helper macro.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte Blend(byte a, byte b)
         {
             int t = a * b + 0x80;
@@ -27,6 +26,9 @@ namespace AsepriteImporter
             {
                 AsepriteBlendMode.Normal => BlendNormal,
                 AsepriteBlendMode.Multiply => BlendMultiply,
+                AsepriteBlendMode.Screen => BlendScreen,
+                AsepriteBlendMode.Addition => BlendAddition,
+                AsepriteBlendMode.Subtract => BlendSubtract,
                 _ => throw new NotSupportedException("unsupported blend mode: " + mode),
             };
         }
@@ -34,7 +36,7 @@ namespace AsepriteImporter
         public static Color32 BlendNormal(Color32 backdrop, Color32 source, byte opacity)
         {
             if (backdrop.a == 0)
-                return new Color32(source.r, source.g, source.b, Blend(source.a, opacity));
+                return new(source.r, source.g, source.b, Blend(source.a, opacity));
             if (source.a == 0)
                 return backdrop;
 
@@ -50,12 +52,43 @@ namespace AsepriteImporter
 
         public static Color32 BlendMultiply(Color32 backdrop, Color32 source, byte opacity)
         {
-            Color32 mult = new Color32(
+            Color32 result = new(
                 Blend(backdrop.r, source.r),
                 Blend(backdrop.g, source.g),
                 Blend(backdrop.b, source.b),
                 source.a);
-            return BlendNormal(backdrop, mult, opacity);
+            return BlendNormal(backdrop, result, opacity);
+        }
+
+        public static Color32 BlendScreen(Color32 backdrop, Color32 source, byte opacity)
+        {
+            Color32 result = new(
+                (byte)(backdrop.r + source.r - Blend(backdrop.r, source.r)),
+                (byte)(backdrop.g + source.g - Blend(backdrop.g, source.g)),
+                (byte)(backdrop.b + source.b - Blend(backdrop.b, source.b)),
+                source.a);
+            return BlendNormal(backdrop, result, opacity);
+        }
+
+
+        public static Color32 BlendAddition(Color32 backdrop, Color32 source, byte opacity)
+        {
+            Color32 result = new(
+                (byte)Math.Min(backdrop.r + source.r, 255),
+                (byte)Math.Min(backdrop.g + source.g, 255),
+                (byte)Math.Min(backdrop.b + source.b, 255),
+                source.a);
+            return BlendNormal(backdrop, result, opacity);
+        }
+
+        public static Color32 BlendSubtract(Color32 backdrop, Color32 source, byte opacity)
+        {
+            Color32 result = new(
+                (byte)Math.Max(backdrop.r - source.r, 0),
+                (byte)Math.Max(backdrop.g - source.g, 0),
+                (byte)Math.Max(backdrop.b - source.b, 0),
+                source.a);
+            return BlendNormal(backdrop, result, opacity);
         }
     }
 }
